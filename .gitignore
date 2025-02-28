@@ -1,0 +1,6 @@
+.idea
+target
+logs
+.DS_Store
+history.txt
+offset.txt
