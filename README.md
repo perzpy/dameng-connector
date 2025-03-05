@@ -45,24 +45,24 @@ curl -X POST -H "Content-Type: application/json" --data @dm-connector.json http:
 
 ### Debezium 连接器配置
 
-| 选项 | 描述 | 默认值 | 必填 |
-|------|------|--------|------|
-| connector.class | 连接器类名 | io.debezium.connector.dm.DMConnector | 是 |
-| database.hostname | 达梦数据库主机名 | - | 是 |
-| database.port | 达梦数据库端口号 | 5236 | 是 |
-| database.user | 数据库用户名 | - | 是 |
-| database.password | 数据库密码 | - | 是 |
-| database.dbname | 数据库名称 | - | 是 |
-| database.server.name | 连接器唯一名称 | - | 是 |
-| table.include.list | 需要捕获的表列表 | - | 否 |
-| snapshot.mode | 快照模式 | initial | 否 |
-| transforms | 转换配置 | - | 否 |
+| 选项                   | 描述       | 默认值                                  | 必填 |
+|----------------------|----------|--------------------------------------|----|
+| connector.class      | 连接器类名    | io.debezium.connector.dm.DMConnector | 是  |
+| database.hostname    | 达梦数据库主机名 | -                                    | 是  |
+| database.port        | 达梦数据库端口号 | 5236                                 | 是  |
+| database.user        | 数据库用户名   | -                                    | 是  |
+| database.password    | 数据库密码    | -                                    | 是  |
+| database.dbname      | 数据库名称    | -                                    | 是  |
+| database.server.name | 连接器唯一名称  | -                                    | 是  |
+| table.include.list   | 需要捕获的表列表 | -                                    | 否  |
+| snapshot.mode        | 快照模式     | initial                              | 否  |
+| transforms           | 转换配置     | -                                    | 否  |
 
 ## 版本兼容性
 
-| 本项目版本 | Debezium 版本 | 达梦数据库版本 |
-|-------|-------------|---------|
-| 1.0.x | 1.5.x       | 8.x     |
+| 本项目版本    | Debezium 版本 | 达梦数据库版本 |
+|----------|-------------|---------|
+| 2025.1.0 | 1.9.x       | 8.x     |
 
 ## 贡献指南
 
