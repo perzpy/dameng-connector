@@ -122,6 +122,12 @@ public class DamengValueConverters
             // return sufficiently sized int schema for non-floating point types
             Integer scale = column.scale().get();
 
+            // 独立处理 NUMBER(0, 0) 类型的列
+            if (column.length() == 0 && scale == 0) {
+                // 如果是 NUMBER(0, 0) 类型的列，将其使用 INT32 模式，因为它可能包含任意精度的数字
+                return SchemaBuilder.int32();
+            }
+
             // a negative scale means rounding, e.g. NUMBER(10, -2) would be rounded to hundreds
             if (scale <= 0) {
                 int width = column.length() - scale;
@@ -181,6 +187,12 @@ public class DamengValueConverters
     {
         if (column.scale().isPresent()) {
             Integer scale = column.scale().get();
+
+            // 独立处理 NUMBER(0, 0) 类型的列
+            if (column.length() == 0 && scale == 0) {
+                // 为 NUMBER(0, 0)类型使用INTEGER或BIGINT转换器，因为它可能包含任意精度的数字
+                return data -> convertNumericAsInteger(column, fieldDefn, data);
+            }
 
             if (scale <= 0) {
                 int width = column.length() - scale;
@@ -346,6 +358,11 @@ public class DamengValueConverters
 
     protected Object convertNumericAsInteger(Column column, Field fieldDefn, Object data)
     {
+        // 如果数据是字符串类型，先进行trim处理
+        if (data instanceof String) {
+            data = ((String) data).trim();
+        }
+
         return super.convertInteger(column, fieldDefn, data);
     }
 

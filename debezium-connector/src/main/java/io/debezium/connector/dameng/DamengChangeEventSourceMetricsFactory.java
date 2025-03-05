@@ -11,13 +11,14 @@ import io.debezium.connector.common.CdcSourceTaskContext;
 import io.debezium.pipeline.metrics.DefaultChangeEventSourceMetricsFactory;
 import io.debezium.pipeline.metrics.StreamingChangeEventSourceMetrics;
 import io.debezium.pipeline.source.spi.EventMetadataProvider;
+import io.debezium.pipeline.spi.Partition;
 
 /**
  * @author Chris Cranford
  */
 @SuppressFBWarnings(value = {"EI_EXPOSE_REP", "EI_EXPOSE_REP2"})
-public class DamengChangeEventSourceMetricsFactory
-        extends DefaultChangeEventSourceMetricsFactory
+public class DamengChangeEventSourceMetricsFactory<P extends Partition>
+        extends DefaultChangeEventSourceMetricsFactory<P>
 {
     private final DamengStreamingChangeEventSourceMetrics streamingMetrics;
 
@@ -27,7 +28,7 @@ public class DamengChangeEventSourceMetricsFactory
     }
 
     @Override
-    public <T extends CdcSourceTaskContext> StreamingChangeEventSourceMetrics getStreamingMetrics(T taskContext,
+    public <T extends CdcSourceTaskContext> StreamingChangeEventSourceMetrics<P> getStreamingMetrics(T taskContext,
             ChangeEventQueueMetrics changeEventQueueMetrics,
             EventMetadataProvider eventMetadataProvider)
     {

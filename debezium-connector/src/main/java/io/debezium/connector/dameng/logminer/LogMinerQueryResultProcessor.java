@@ -13,6 +13,7 @@ import io.debezium.connector.dameng.DamengDatabaseSchema;
 import io.debezium.connector.dameng.DamengOffsetContext;
 import io.debezium.connector.dameng.DamengStreamingChangeEventSourceMetrics;
 import io.debezium.connector.dameng.DamengValueConverters;
+import io.debezium.connector.dameng.MapBackedPartition;
 import io.debezium.connector.dameng.Scn;
 import io.debezium.connector.dameng.logminer.parser.DmlParser;
 import io.debezium.connector.dameng.logminer.parser.DmlParserException;
@@ -53,7 +54,7 @@ class LogMinerQueryResultProcessor
     private final DmlParser dmlParser;
     private final DamengOffsetContext offsetContext;
     private final DamengDatabaseSchema schema;
-    private final EventDispatcher<TableId> dispatcher;
+    private final EventDispatcher<MapBackedPartition, TableId> dispatcher;
     private final DamengConnectorConfig connectorConfig;
     private final Clock clock;
     private final HistoryRecorder historyRecorder;
@@ -62,12 +63,18 @@ class LogMinerQueryResultProcessor
     private Scn currentOffsetCommitScn = Scn.NULL;
     private long stuckScnCounter = 0;
 
-    LogMinerQueryResultProcessor(ChangeEventSourceContext context, DamengConnection jdbcConnection,
-            DamengConnectorConfig connectorConfig, DamengStreamingChangeEventSourceMetrics streamingMetrics,
+    LogMinerQueryResultProcessor(
+            ChangeEventSourceContext context,
+            DamengConnection jdbcConnection,
+            DamengConnectorConfig connectorConfig,
+            DamengStreamingChangeEventSourceMetrics streamingMetrics,
             TransactionalBuffer transactionalBuffer,
-            DamengOffsetContext offsetContext, DamengDatabaseSchema schema,
-            EventDispatcher<TableId> dispatcher,
-            Clock clock, HistoryRecorder historyRecorder)
+            DamengOffsetContext offsetContext,
+            DamengDatabaseSchema schema,
+            EventDispatcher<MapBackedPartition, TableId> dispatcher,
+            Clock clock,
+            HistoryRecorder historyRecorder
+    )
     {
         this.context = context;
         this.streamingMetrics = streamingMetrics;

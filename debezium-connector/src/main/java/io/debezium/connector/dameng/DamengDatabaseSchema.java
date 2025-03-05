@@ -39,7 +39,9 @@ public class DamengDatabaseSchema
                         schemaNameAdjuster,
                         connectorConfig.customConverterRegistry(),
                         connectorConfig.getSourceInfoStructMaker().schema(),
-                        connectorConfig.getSanitizeFieldNames()),
+                        connectorConfig.getSanitizeFieldNames(),
+                        false
+                ),
                 connection.getTablenameCaseInsensitivity(connectorConfig),
                 connectorConfig.getKeyMapper());
     }

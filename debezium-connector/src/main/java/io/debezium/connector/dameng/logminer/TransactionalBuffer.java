@@ -9,6 +9,7 @@ import io.debezium.annotation.NotThreadSafe;
 import io.debezium.connector.dameng.DamengDatabaseSchema;
 import io.debezium.connector.dameng.DamengOffsetContext;
 import io.debezium.connector.dameng.DamengStreamingChangeEventSourceMetrics;
+import io.debezium.connector.dameng.MapBackedPartition;
 import io.debezium.connector.dameng.Scn;
 import io.debezium.connector.dameng.logminer.valueholder.LogMinerDmlEntry;
 import io.debezium.pipeline.ErrorHandler;
@@ -152,8 +153,15 @@ public final class TransactionalBuffer
      * @param dispatcher event dispatcher
      * @return true if committed transaction is in the buffer, was not processed yet and processed now
      */
-    boolean commit(String transactionId, Scn scn, DamengOffsetContext offsetContext, Timestamp timestamp,
-            ChangeEventSource.ChangeEventSourceContext context, String debugMessage, EventDispatcher<TableId> dispatcher)
+    boolean commit(
+            String transactionId,
+            Scn scn,
+            DamengOffsetContext offsetContext,
+            Timestamp timestamp,
+            ChangeEventSource.ChangeEventSourceContext context,
+            String debugMessage,
+            EventDispatcher<MapBackedPartition, TableId> dispatcher
+    )
     {
         Instant start = Instant.now();
         Transaction transaction = transactions.remove(transactionId);
@@ -179,8 +187,16 @@ public final class TransactionalBuffer
         return true;
     }
 
-    private void commit(ChangeEventSource.ChangeEventSourceContext context, DamengOffsetContext offsetContext, Instant start,
-            Transaction transaction, Timestamp timestamp, Scn smallestScn, Scn scn, EventDispatcher<TableId> dispatcher)
+    private void commit(
+            ChangeEventSource.ChangeEventSourceContext context,
+            DamengOffsetContext offsetContext,
+            Instant start,
+            Transaction transaction,
+            Timestamp timestamp,
+            Scn smallestScn,
+            Scn scn,
+            EventDispatcher<MapBackedPartition, TableId> dispatcher
+    )
     {
         try {
             int counter = transaction.events.size();
@@ -202,18 +218,28 @@ public final class TransactionalBuffer
                 }
 
                 LOGGER.trace("Processing DML event {} with SCN {}", event.getEntry(), event.getScn());
-                dispatcher.dispatchDataChangeEvent(event.getTableId(),
+
+                // 获取当前分区并传递给dispatcher
+                MapBackedPartition partition = offsetContext.asPartition();
+
+                dispatcher.dispatchDataChangeEvent(
+                        partition,
+                        event.getTableId(),
                         new LogMinerChangeRecordEmitter(
+                                partition,
                                 offsetContext,
                                 event.getEntry(),
                                 schema.tableFor(event.getTableId()),
-                                clock));
+                                clock
+                        )
+                );
             }
 
             lastCommittedScn = Scn.valueOf(scn.longValue());
 
             if (!transaction.events.isEmpty()) {
-                dispatcher.dispatchTransactionCommittedEvent(offsetContext);
+                MapBackedPartition partition = offsetContext.asPartition();
+                dispatcher.dispatchTransactionCommittedEvent(partition, offsetContext);
             }
         }
         catch (InterruptedException e) {
@@ -243,7 +269,7 @@ public final class TransactionalBuffer
     void checkAndAutoCommitTransactions(
             DamengOffsetContext offsetContext,
             ChangeEventSource.ChangeEventSourceContext context,
-            EventDispatcher<TableId> dispatcher
+            EventDispatcher<MapBackedPartition, TableId> dispatcher
     )
     {
         Instant now = Instant.now();
@@ -371,8 +397,7 @@ public final class TransactionalBuffer
         transactions.clear();
 
         if (this.streamingMetrics != null) {
-            // if metrics registered, unregister them
-            this.streamingMetrics.unregister(LOGGER);
+            this.streamingMetrics.unregister();
         }
     }
 

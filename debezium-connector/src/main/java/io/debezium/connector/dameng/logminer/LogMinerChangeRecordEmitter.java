@@ -11,6 +11,7 @@ import io.debezium.connector.dameng.logminer.valueholder.LogMinerColumnValue;
 import io.debezium.connector.dameng.logminer.valueholder.LogMinerDmlEntry;
 import io.debezium.data.Envelope.Operation;
 import io.debezium.pipeline.spi.OffsetContext;
+import io.debezium.pipeline.spi.Partition;
 import io.debezium.relational.Table;
 import io.debezium.util.Clock;
 
@@ -21,21 +22,27 @@ import java.util.List;
  * Emits change record based on a single {@link LogMinerDmlEntry} event.
  */
 @SuppressFBWarnings(value = {"EI_EXPOSE_REP2"})
-public class LogMinerChangeRecordEmitter
-        extends BaseChangeRecordEmitter<LogMinerColumnValue>
+public class LogMinerChangeRecordEmitter<P extends Partition>
+        extends BaseChangeRecordEmitter<LogMinerColumnValue, P>
 {
     protected final Table table;
     private final LogMinerDmlEntry dmlEntry;
 
-    public LogMinerChangeRecordEmitter(OffsetContext offset, LogMinerDmlEntry dmlEntry, Table table, Clock clock)
+    public LogMinerChangeRecordEmitter(
+            P partition,
+            OffsetContext offset,
+            LogMinerDmlEntry dmlEntry,
+            Table table,
+            Clock clock
+    )
     {
-        super(offset, table, clock);
+        super(partition, offset, table, clock);
         this.dmlEntry = dmlEntry;
         this.table = table;
     }
 
     @Override
-    protected Operation getOperation()
+    public Operation getOperation()
     {
         return dmlEntry.getCommandType();
     }
@@ -62,6 +69,7 @@ public class LogMinerChangeRecordEmitter
         return columnValue.getColumnName();
     }
 
+    @Override
     protected Object getColumnData(LogMinerColumnValue columnValue)
     {
         return columnValue.getColumnData();

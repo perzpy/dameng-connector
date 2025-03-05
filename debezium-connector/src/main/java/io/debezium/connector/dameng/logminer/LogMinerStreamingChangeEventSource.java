@@ -14,6 +14,7 @@ import io.debezium.connector.dameng.DamengDatabaseSchema;
 import io.debezium.connector.dameng.DamengOffsetContext;
 import io.debezium.connector.dameng.DamengStreamingChangeEventSourceMetrics;
 import io.debezium.connector.dameng.DamengTaskContext;
+import io.debezium.connector.dameng.MapBackedPartition;
 import io.debezium.connector.dameng.Scn;
 import io.debezium.jdbc.JdbcConfiguration;
 import io.debezium.pipeline.ErrorHandler;
@@ -60,15 +61,14 @@ import static io.debezium.connector.dameng.logminer.LogMinerHelper.startLogMinin
  */
 @SuppressFBWarnings(value = {"EI_EXPOSE_REP", "EI_EXPOSE_REP2"})
 public class LogMinerStreamingChangeEventSource
-        implements StreamingChangeEventSource
+        implements StreamingChangeEventSource<MapBackedPartition, DamengOffsetContext>
 {
     private static final Logger LOGGER = LoggerFactory.getLogger(LogMinerStreamingChangeEventSource.class);
 
     private final DamengConnection jdbcConnection;
-    private final EventDispatcher<TableId> dispatcher;
+    private final EventDispatcher<MapBackedPartition, TableId> dispatcher;
     private final Clock clock;
     private final DamengDatabaseSchema schema;
-    private final DamengOffsetContext offsetContext;
     private final boolean isRac;
     private final Set<String> racHosts = new HashSet<>();
     private final JdbcConfiguration jdbcConfiguration;
@@ -84,17 +84,22 @@ public class LogMinerStreamingChangeEventSource
     private Scn endScn;
     private List<BigInteger> currentRedoLogSequences;
 
-    public LogMinerStreamingChangeEventSource(DamengConnectorConfig connectorConfig, DamengOffsetContext offsetContext,
-            DamengConnection jdbcConnection, EventDispatcher<TableId> dispatcher,
-            ErrorHandler errorHandler, Clock clock, DamengDatabaseSchema schema,
-            DamengTaskContext taskContext, Configuration jdbcConfig,
-            DamengStreamingChangeEventSourceMetrics streamingMetrics)
+    public LogMinerStreamingChangeEventSource(
+            DamengConnectorConfig connectorConfig,
+            DamengConnection jdbcConnection,
+            EventDispatcher<MapBackedPartition, TableId> dispatcher,
+            ErrorHandler errorHandler,
+            Clock clock,
+            DamengDatabaseSchema schema,
+            DamengTaskContext taskContext,
+            Configuration jdbcConfig,
+            DamengStreamingChangeEventSourceMetrics streamingMetrics
+    )
     {
         this.jdbcConnection = jdbcConnection;
         this.dispatcher = dispatcher;
         this.clock = clock;
         this.schema = schema;
-        this.offsetContext = offsetContext;
         this.connectorConfig = connectorConfig;
         this.strategy = connectorConfig.getLogMiningStrategy();
         this.isContinuousMining = connectorConfig.isContinuousMining();
@@ -115,9 +120,11 @@ public class LogMinerStreamingChangeEventSource
      * This is the loop to get changes from LogMiner
      *
      * @param context change event source context
+     * @param partition the partition
+     * @param offsetContext the offset context
      */
     @Override
-    public void execute(ChangeEventSourceContext context)
+    public void execute(ChangeEventSourceContext context, MapBackedPartition partition, DamengOffsetContext offsetContext)
     {
         try (TransactionalBuffer transactionalBuffer = new TransactionalBuffer(schema, clock, errorHandler, streamingMetrics, connectorConfig.getAutoCommitTimeoutMs())) {
             try {
@@ -135,9 +142,18 @@ public class LogMinerStreamingChangeEventSource
                     // todo: why can't OracleConnection be used rather than a Factory+JdbcConfiguration?
                     historyRecorder.prepare(streamingMetrics, jdbcConfiguration, connectorConfig.getLogMinerHistoryRetentionHours());
 
-                    final LogMinerQueryResultProcessor processor = new LogMinerQueryResultProcessor(context, jdbcConnection,
-                            connectorConfig, streamingMetrics, transactionalBuffer, offsetContext, schema, dispatcher,
-                            clock, historyRecorder);
+                    final LogMinerQueryResultProcessor processor = new LogMinerQueryResultProcessor(
+                            context,
+                            jdbcConnection,
+                            connectorConfig,
+                            streamingMetrics,
+                            transactionalBuffer,
+                            offsetContext,
+                            schema,
+                            dispatcher,
+                            clock,
+                            historyRecorder
+                    );
 
                     final String query = SqlUtils.logMinerContentsQuery(connectorConfig, jdbcConnection.username());
 
@@ -158,7 +174,7 @@ public class LogMinerStreamingChangeEventSource
 
                             initializeRedoLogsForMining(jdbcConnection, true, archiveLogRetention);
 
-                            abandonOldTransactionsIfExist(jdbcConnection, transactionalBuffer);
+                            abandonOldTransactionsIfExist(jdbcConnection, transactionalBuffer, offsetContext);
 
                             currentRedoLogSequences = getCurrentRedoLogSequences();
                         }
@@ -168,7 +184,7 @@ public class LogMinerStreamingChangeEventSource
                                         startScn, endScn, offsetContext.getScn(), strategy, isContinuousMining);
                                 endMining(jdbcConnection);
                                 initializeRedoLogsForMining(jdbcConnection, true, archiveLogRetention);
-                                abandonOldTransactionsIfExist(jdbcConnection, transactionalBuffer);
+                                abandonOldTransactionsIfExist(jdbcConnection, transactionalBuffer, offsetContext);
                                 currentRedoLogSequences = getCurrentRedoLogSequences();
                             }
                         }
@@ -220,7 +236,7 @@ public class LogMinerStreamingChangeEventSource
         }
     }
 
-    private void abandonOldTransactionsIfExist(DamengConnection connection, TransactionalBuffer transactionalBuffer)
+    private void abandonOldTransactionsIfExist(DamengConnection connection, TransactionalBuffer transactionalBuffer, DamengOffsetContext offsetContext)
     {
         Duration transactionRetention = connectorConfig.getLogMiningTransactionRetention();
         if (!Duration.ZERO.equals(transactionRetention)) {
@@ -239,7 +255,7 @@ public class LogMinerStreamingChangeEventSource
     {
         if (!postEndMiningSession) {
             if (DamengConnectorConfig.LogMiningStrategy.CATALOG_IN_REDO.equals(strategy)) {
-//                buildDataDictionary(connection);
+                // buildDataDictionary(connection);
             }
             if (!isContinuousMining) {
                 setRedoLogFilesForMining(connection, startScn, archiveLogRetention);
@@ -248,7 +264,7 @@ public class LogMinerStreamingChangeEventSource
         else {
             if (!isContinuousMining) {
                 if (DamengConnectorConfig.LogMiningStrategy.CATALOG_IN_REDO.equals(strategy)) {
-//                    buildDataDictionary(connection);
+                    // buildDataDictionary(connection);
                 }
                 setRedoLogFilesForMining(connection, startScn, archiveLogRetention);
             }
@@ -329,7 +345,23 @@ public class LogMinerStreamingChangeEventSource
     }
 
     @Override
+    public void init()
+            throws InterruptedException
+    {
+        // 初始化操作
+    }
+
+    @Override
+    public boolean executeIteration(ChangeEventSourceContext context, MapBackedPartition partition, DamengOffsetContext offsetContext)
+            throws InterruptedException
+    {
+        // 实现一次迭代的执行
+        return false;
+    }
+
+    @Override
     public void commitOffset(Map<String, ?> offset)
     {
+        // 提交偏移量
     }
 }

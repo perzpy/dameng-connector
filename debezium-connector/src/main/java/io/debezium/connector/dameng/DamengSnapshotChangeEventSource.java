@@ -10,13 +10,12 @@ import io.debezium.connector.dameng.logminer.LogMinerHelper;
 import io.debezium.pipeline.EventDispatcher;
 import io.debezium.pipeline.source.spi.SnapshotProgressListener;
 import io.debezium.pipeline.source.spi.StreamingChangeEventSource;
-import io.debezium.pipeline.spi.OffsetContext;
+import io.debezium.pipeline.spi.Partition;
 import io.debezium.pipeline.txmetadata.TransactionContext;
 import io.debezium.relational.RelationalSnapshotChangeEventSource;
 import io.debezium.relational.Table;
 import io.debezium.relational.TableId;
 import io.debezium.schema.SchemaChangeEvent;
-import io.debezium.schema.SchemaChangeEvent.SchemaChangeEventType;
 import io.debezium.util.Clock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,6 +25,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Savepoint;
 import java.sql.Statement;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -35,20 +37,25 @@ import java.util.stream.Collectors;
  *
  * @author Gunnar Morling
  */
-@SuppressFBWarnings(value = {"EI_EXPOSE_REP2", "SQL_NONCONSTANT_STRING_PASSED_TO_EXECUTE"})
-public class DamengSnapshotChangeEventSource
-        extends RelationalSnapshotChangeEventSource
+@SuppressFBWarnings(value = {"EI_EXPOSE_REP2", "SQL_NONCONSTANT_STRING_PASSED_TO_EXECUTE", "RCN_REDUNDANT_NULLCHECK_OF_NONNULL_VALUE"})
+public class DamengSnapshotChangeEventSource<P extends Partition>
+        extends RelationalSnapshotChangeEventSource<P, DamengOffsetContext>
 {
     private static final Logger LOGGER = LoggerFactory.getLogger(DamengSnapshotChangeEventSource.class);
 
     private final DamengConnectorConfig connectorConfig;
     private final DamengConnection jdbcConnection;
 
-    public DamengSnapshotChangeEventSource(DamengConnectorConfig connectorConfig, DamengOffsetContext previousOffset, DamengConnection jdbcConnection,
-            DamengDatabaseSchema schema, EventDispatcher<TableId> dispatcher, Clock clock,
-            SnapshotProgressListener snapshotProgressListener)
+    public DamengSnapshotChangeEventSource(
+            DamengConnectorConfig connectorConfig,
+            DamengConnection jdbcConnection,
+            DamengDatabaseSchema schema,
+            EventDispatcher<P, TableId> dispatcher,
+            Clock clock,
+            SnapshotProgressListener<P> snapshotProgressListener
+    )
     {
-        super(connectorConfig, previousOffset, jdbcConnection, schema, dispatcher, clock, snapshotProgressListener);
+        super(connectorConfig, jdbcConnection, schema, dispatcher, clock, snapshotProgressListener);
 
         this.connectorConfig = connectorConfig;
         this.jdbcConnection = jdbcConnection;
@@ -60,7 +67,7 @@ public class DamengSnapshotChangeEventSource
     }
 
     @Override
-    protected SnapshottingTask getSnapshottingTask(OffsetContext previousOffset)
+    protected SnapshottingTask getSnapshottingTask(P partition, DamengOffsetContext previousOffset)
     {
         boolean snapshotSchema = true;
         boolean snapshotData = true;
@@ -78,18 +85,18 @@ public class DamengSnapshotChangeEventSource
     }
 
     @Override
-    protected SnapshotContext prepare(ChangeEventSourceContext context)
+    protected SnapshotContext<P, DamengOffsetContext> prepare(P partition)
             throws Exception
     {
         if (connectorConfig.getPdbName() != null) {
             jdbcConnection.setSessionToPdb(connectorConfig.getPdbName());
         }
 
-        return new OracleSnapshotContext(connectorConfig.getCatalogName());
+        return new OracleSnapshotContext(partition, connectorConfig.getCatalogName());
     }
 
     @Override
-    protected Set<TableId> getAllTableIds(RelationalSnapshotContext ctx)
+    protected Set<TableId> getAllTableIds(RelationalSnapshotContext<P, DamengOffsetContext> ctx)
             throws Exception
     {
         return jdbcConnection.getAllTableIds(ctx.catalogName);
@@ -98,7 +105,7 @@ public class DamengSnapshotChangeEventSource
     }
 
     @Override
-    protected void lockTablesForSchemaSnapshot(ChangeEventSourceContext sourceContext, RelationalSnapshotContext snapshotContext)
+    protected void lockTablesForSchemaSnapshot(ChangeEventSourceContext sourceContext, RelationalSnapshotContext<P, DamengOffsetContext> snapshotContext)
             throws SQLException, InterruptedException
     {
         ((OracleSnapshotContext) snapshotContext).preSchemaSnapshotSavepoint = jdbcConnection.connection().setSavepoint("dbz_schema_snapshot");
@@ -116,14 +123,14 @@ public class DamengSnapshotChangeEventSource
     }
 
     @Override
-    protected void releaseSchemaSnapshotLocks(RelationalSnapshotContext snapshotContext)
+    protected void releaseSchemaSnapshotLocks(RelationalSnapshotContext<P, DamengOffsetContext> snapshotContext)
             throws SQLException
     {
         jdbcConnection.connection().rollback(((OracleSnapshotContext) snapshotContext).preSchemaSnapshotSavepoint);
     }
 
     @Override
-    protected void determineSnapshotOffset(RelationalSnapshotContext ctx)
+    protected void determineSnapshotOffset(RelationalSnapshotContext<P, DamengOffsetContext> ctx, DamengOffsetContext previousOffset)
             throws Exception
     {
         Optional<Scn> latestTableDdlScn = getLatestTableDdlScn(ctx);
@@ -145,7 +152,7 @@ public class DamengSnapshotChangeEventSource
                 .build();
     }
 
-    private Scn getCurrentScn(SnapshotContext ctx)
+    private Scn getCurrentScn(SnapshotContext<P, DamengOffsetContext> ctx)
             throws SQLException
     {
         if (connectorConfig.getAdapter().equals(DamengConnectorConfig.ConnectorAdapter.LOG_MINER)) {
@@ -182,7 +189,7 @@ public class DamengSnapshotChangeEventSource
      * Returns the SCN of the latest DDL change to the captured tables. The result will be empty if there's no table to
      * capture as per the configuration.
      */
-    private Optional<Scn> getLatestTableDdlScn(RelationalSnapshotContext ctx)
+    private Optional<Scn> getLatestTableDdlScn(RelationalSnapshotContext<P, DamengOffsetContext> ctx)
             throws SQLException
     {
         if (ctx.capturedTables.isEmpty()) {
@@ -226,7 +233,7 @@ public class DamengSnapshotChangeEventSource
     }
 
     @Override
-    protected void readTableStructure(ChangeEventSourceContext sourceContext, RelationalSnapshotContext snapshotContext)
+    protected void readTableStructure(ChangeEventSourceContext sourceContext, RelationalSnapshotContext<P, DamengOffsetContext> snapshotContext, DamengOffsetContext offsetContext)
             throws SQLException, InterruptedException
     {
         Set<String> schemas = snapshotContext.capturedTables.stream()
@@ -241,32 +248,19 @@ public class DamengSnapshotChangeEventSource
                 throw new InterruptedException("Interrupted while reading structure of schema " + schema);
             }
 
-            // todo: DBZ-137 the new readSchemaForCapturedTables seems to cause failures.
-            // For now, reverted to the default readSchema implementation as the intended goal
-            // with the new implementation was to be faster, not change behavior.
-            // if (connectorConfig.getAdapter().equals(OracleConnectorConfig.ConnectorAdapter.LOG_MINER)) {
-            // jdbcConnection.readSchemaForCapturedTables(
-            // snapshotContext.tables,
-            // snapshotContext.catalogName,
-            // schema,
-            // connectorConfig.getColumnFilter(),
-            // false,
-            // snapshotContext.capturedTables);
-            // }
-            // else {
             jdbcConnection.readSchema(
                     snapshotContext.tables,
                     snapshotContext.catalogName,
                     schema,
                     connectorConfig.getTableFilters().dataCollectionFilter(),
                     null,
-                    false);
-            // }
+                    false
+            );
         }
     }
 
     @Override
-    protected String enhanceOverriddenSelect(RelationalSnapshotContext snapshotContext, String overriddenSelect, TableId tableId)
+    protected String enhanceOverriddenSelect(RelationalSnapshotContext<P, DamengOffsetContext> snapshotContext, String overriddenSelect, TableId tableId)
     {
         String snapshotOffset = (String) snapshotContext.offset.getOffset().get(SourceInfo.SCN_KEY);
         String token = connectorConfig.getTokenToReplaceInSnapshotPredicate();
@@ -277,11 +271,11 @@ public class DamengSnapshotChangeEventSource
     }
 
     @Override
-    protected SchemaChangeEvent getCreateTableEvent(RelationalSnapshotContext snapshotContext, Table table)
+    protected SchemaChangeEvent getCreateTableEvent(RelationalSnapshotContext<P, DamengOffsetContext> snapshotContext, Table table)
             throws SQLException
     {
         try (Statement statement = jdbcConnection.connection().createStatement();
-                ResultSet rs = statement.executeQuery("select dbms_metadata.get_ddl( 'TABLE', '" + table.id().table() + "', '" + table.id().schema() + "' ) from dual")) {
+                ResultSet rs = statement.executeQuery("SELECT DBMS_METADATA.GET_DDL( 'TABLE', '" + table.id().table() + "', '" + table.id().schema() + "' ) FROM DUAL")) {
             if (!rs.next()) {
                 throw new IllegalStateException("Couldn't get metadata");
             }
@@ -289,23 +283,38 @@ public class DamengSnapshotChangeEventSource
             Object res = rs.getObject(1);
             String ddl = ((Clob) res).getSubString(1, (int) ((Clob) res).length());
 
-            return new SchemaChangeEvent(
-                    snapshotContext.offset.getPartition(),
-                    snapshotContext.offset.getOffset(),
-                    snapshotContext.offset.getSourceInfo(),
+            // 在Debezium 1.9.8中，SchemaChangeEvent.ofCreate()方法需要一个非null的partition参数
+            // 如果snapshotContext.partition为null，我们需要从偏移量上下文中获取一个有效的partition
+            P partition = snapshotContext.partition;
+            if (partition == null) {
+                // 从偏移量上下文创建一个partition
+                partition = (P) snapshotContext.offset.asPartition();
+
+                // 如果仍然为null，记录警告并尝试创建一个空的MapBackedPartition
+                if (partition == null) {
+                    LOGGER.warn("Could not determine partition for table {}; using empty partition", table.id());
+                    Map<String, String> partitionData = new HashMap<>();
+                    partitionData.put("server", connectorConfig.getLogicalName());
+                    partition = (P) new MapBackedPartition(partitionData);
+                }
+            }
+
+            return SchemaChangeEvent.ofCreate(
+                    partition,
+                    snapshotContext.offset,
                     snapshotContext.catalogName,
                     table.id().schema(),
                     ddl,
                     table,
-                    SchemaChangeEventType.CREATE,
-                    true);
+                    true
+            );
         }
     }
 
     @Override
-    protected Optional<String> getSnapshotSelect(RelationalSnapshotContext snapshotContext, TableId tableId)
+    protected Optional<String> getSnapshotSelect(RelationalSnapshotContext<P, DamengOffsetContext> snapshotContext, TableId tableId, List<String> columns)
     {
-        final DamengOffsetContext offset = (DamengOffsetContext) snapshotContext.offset;
+        final DamengOffsetContext offset = snapshotContext.offset;
         final String snapshotOffset = offset.getScn().toString();
         if (snapshotOffset == null) {
             throw new IllegalStateException("Snapshot offset cannot be null");
@@ -314,7 +323,7 @@ public class DamengSnapshotChangeEventSource
     }
 
     @Override
-    protected void complete(SnapshotContext snapshotContext)
+    protected void complete(SnapshotContext<P, DamengOffsetContext> snapshotContext)
     {
         if (connectorConfig.getPdbName() != null) {
             jdbcConnection.resetSessionToCdb();
@@ -324,15 +333,15 @@ public class DamengSnapshotChangeEventSource
     /**
      * Mutable context which is populated in the course of snapshotting.
      */
-    private static class OracleSnapshotContext
-            extends RelationalSnapshotContext
+    private class OracleSnapshotContext
+            extends RelationalSnapshotContext<P, DamengOffsetContext>
     {
         private Savepoint preSchemaSnapshotSavepoint;
 
-        public OracleSnapshotContext(String catalogName)
+        public OracleSnapshotContext(P partition, String catalogName)
                 throws SQLException
         {
-            super(catalogName);
+            super(partition, catalogName);
         }
     }
 }

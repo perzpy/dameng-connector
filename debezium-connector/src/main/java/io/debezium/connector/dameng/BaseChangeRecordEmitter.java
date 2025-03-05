@@ -7,6 +7,7 @@ package io.debezium.connector.dameng;
 
 import io.debezium.data.Envelope.Operation;
 import io.debezium.pipeline.spi.OffsetContext;
+import io.debezium.pipeline.spi.Partition;
 import io.debezium.relational.RelationalChangeRecordEmitter;
 import io.debezium.relational.Table;
 import io.debezium.util.Clock;
@@ -14,18 +15,18 @@ import io.debezium.util.Clock;
 /**
  * Base class to emit change data based on a single entry event.
  */
-public abstract class BaseChangeRecordEmitter<T>
-        extends RelationalChangeRecordEmitter
+public abstract class BaseChangeRecordEmitter<T, P extends Partition>
+        extends RelationalChangeRecordEmitter<P>
 {
     protected final Table table;
 
-    protected BaseChangeRecordEmitter(OffsetContext offset, Table table, Clock clock)
+    protected BaseChangeRecordEmitter(P partition, OffsetContext offset, Table table, Clock clock)
     {
-        super(offset, clock);
+        super(partition, offset, clock);
         this.table = table;
     }
 
-    protected abstract Operation getOperation();
+    public abstract Operation getOperation();
 
     protected abstract String getColumnName(T columnValue);
 

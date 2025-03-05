@@ -88,10 +88,14 @@ public class DamengOffsetContext
         return null;
     }
 
-    @Override
     public Map<String, ?> getPartition()
     {
         return partition;
+    }
+
+    public MapBackedPartition asPartition()
+    {
+        return new MapBackedPartition(partition);
     }
 
     @Override
@@ -268,39 +272,21 @@ public class DamengOffsetContext
     }
 
     public static class Loader
-            implements OffsetContext.Loader
+            implements OffsetContext.Loader<DamengOffsetContext>
     {
         private final DamengConnectorConfig connectorConfig;
         private final DamengConnectorConfig.ConnectorAdapter adapter;
 
-        // todo resolve adapter from the config rather than passing it
         public Loader(DamengConnectorConfig connectorConfig, DamengConnectorConfig.ConnectorAdapter adapter)
         {
             this.connectorConfig = connectorConfig;
             this.adapter = adapter;
         }
 
-        public static Scn getScnFromOffset(Map<String, ?> offset)
-        {
-            // Prioritize string-based SCN key over the numeric-based SCN key
-            Object scn = offset.get(SourceInfo.SCN_KEY);
-            if (scn instanceof String) {
-                return Scn.valueOf((String) scn);
-            }
-            else if (scn != null) {
-                return Scn.valueOf((Long) scn);
-            }
-            return null;
-        }
+        // 构造函数不变
 
         @Override
-        public Map<String, ?> getPartition()
-        {
-            return Collections.singletonMap(SERVER_PARTITION_KEY, connectorConfig.getLogicalName());
-        }
-
-        @Override
-        public OffsetContext load(Map<String, ?> offset)
+        public DamengOffsetContext load(Map<String, ?> offset)
         {
             boolean snapshot = Boolean.TRUE.equals(offset.get(SourceInfo.SNAPSHOT_KEY));
             boolean snapshotCompleted = Boolean.TRUE.equals(offset.get(SNAPSHOT_COMPLETED_KEY));

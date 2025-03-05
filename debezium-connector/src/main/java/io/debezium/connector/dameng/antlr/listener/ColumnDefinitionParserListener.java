@@ -232,8 +232,8 @@ public class ColumnDefinitionParserListener
 
         // todo move to enterExpression and apply type conversion
         if (ctx.DEFAULT() != null) {
-            String defaultValue = ctx.expression().getText();
-            columnEditor.defaultValue(defaultValue);
+            String defaultValue = ctx.column_name().getText();
+            columnEditor.defaultValueExpression(defaultValue);
         }
         // todo move to nonNull
         columnEditor.optional(!hasNotNullConstraint);

@@ -338,8 +338,16 @@ public class DamengConnectorConfig
 
     public DamengConnectorConfig(Configuration config)
     {
-        super(DamengConnector.class, config, config.getString(SERVER_NAME), new SystemTablesPredicate(config), x -> x.schema() + "." + x.table(), true,
-                ColumnFilterMode.SCHEMA);
+        super(
+                DamengConnector.class,
+                config,
+                config.getString(SERVER_NAME),
+                new SystemTablesPredicate(config),
+                x -> x.schema() + "." + x.table(),
+                true,
+                ColumnFilterMode.SCHEMA,
+                false
+        );
 
         this.databaseName = toUpperCase(config.getString(DATABASE_NAME));
         this.pdbName = toUpperCase(config.getString(PDB_NAME));

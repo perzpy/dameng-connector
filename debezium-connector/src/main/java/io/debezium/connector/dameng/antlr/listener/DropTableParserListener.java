@@ -32,7 +32,7 @@ public class DropTableParserListener
     @Override
     public void enterDrop_table(final PlSqlParser.Drop_tableContext ctx)
     {
-        TableId tableId = new TableId(catalogName, schemaName, getTableName(ctx.tableview_name()));
+        TableId tableId = new TableId(catalogName, schemaName, getTableName(ctx.tableview_name().get(0)));
         parser.databaseTables().removeTable(tableId);
         super.enterDrop_table(ctx);
     }

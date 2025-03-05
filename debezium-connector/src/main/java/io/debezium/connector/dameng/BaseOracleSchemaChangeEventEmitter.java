@@ -71,16 +71,59 @@ public class BaseOracleSchemaChangeEventEmitter
 
         Table table = tables.forTable(tableId);
 
-        receiver.schemaChangeEvent(new SchemaChangeEvent(
-                offsetContext.getPartition(),
-                offsetContext.getOffset(),
-                offsetContext.getSourceInfo(),
-                sourceDatabaseName,
-                objectOwner,
-                ddlText,
-                table,
-                eventType,
-                false));
+        // 使用适合事件类型的工厂方法创建SchemaChangeEvent
+        SchemaChangeEvent event;
+
+        switch (eventType) {
+            case CREATE:
+                event = SchemaChangeEvent.ofCreate(
+                        offsetContext.asPartition(),
+                        offsetContext,
+                        sourceDatabaseName,
+                        objectOwner,
+                        ddlText,
+                        table,
+                        false);
+                break;
+            case ALTER:
+                event = SchemaChangeEvent.ofAlter(
+                        offsetContext.asPartition(),
+                        offsetContext,
+                        sourceDatabaseName,
+                        objectOwner,
+                        ddlText,
+                        table);
+                break;
+            case DROP:
+                event = SchemaChangeEvent.ofDrop(
+                        offsetContext.asPartition(),
+                        offsetContext,
+                        sourceDatabaseName,
+                        objectOwner,
+                        ddlText,
+                        table);
+                break;
+            case DATABASE:
+                event = SchemaChangeEvent.ofDatabase(
+                        offsetContext.asPartition(),
+                        offsetContext,
+                        sourceDatabaseName,
+                        ddlText,
+                        false);
+                break;
+            default:
+                event = SchemaChangeEvent.of(
+                        eventType,
+                        offsetContext.asPartition(),
+                        offsetContext,
+                        sourceDatabaseName,
+                        objectOwner,
+                        ddlText,
+                        table,
+                        false);
+        }
+
+        receiver.schemaChangeEvent(event);
     }
 
     private SchemaChangeEventType getSchemaChangeEventType()

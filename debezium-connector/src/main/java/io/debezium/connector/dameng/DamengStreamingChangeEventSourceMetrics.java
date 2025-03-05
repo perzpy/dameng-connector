@@ -5,12 +5,19 @@
  */
 package io.debezium.connector.dameng;
 
+import com.google.common.collect.Maps;
 import io.debezium.annotation.ThreadSafe;
 import io.debezium.annotation.VisibleForTesting;
 import io.debezium.connector.base.ChangeEventQueueMetrics;
 import io.debezium.connector.common.CdcSourceTaskContext;
+import io.debezium.data.Envelope;
+import io.debezium.pipeline.ConnectorEvent;
 import io.debezium.pipeline.metrics.StreamingChangeEventSourceMetrics;
 import io.debezium.pipeline.source.spi.EventMetadataProvider;
+import io.debezium.pipeline.spi.OffsetContext;
+import io.debezium.pipeline.spi.Partition;
+import io.debezium.schema.DataCollectionId;
+import org.apache.kafka.connect.data.Struct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,8 +38,7 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 @ThreadSafe
 public class DamengStreamingChangeEventSourceMetrics
-        extends StreamingChangeEventSourceMetrics
-        implements DamengStreamingChangeEventSourceMetricsMXBean
+        implements StreamingChangeEventSourceMetrics, DamengStreamingChangeEventSourceMetricsMXBean
 {
     private static final Logger LOGGER = LoggerFactory.getLogger(DamengStreamingChangeEventSourceMetrics.class);
 
@@ -124,8 +130,6 @@ public class DamengStreamingChangeEventSourceMetrics
             DamengConnectorConfig connectorConfig,
             Clock clock)
     {
-        super(taskContext, changeEventQueueMetrics, metadataProvider);
-
         this.clock = clock;
         startTime = clock.instant();
         timeDifference.set(0L);
@@ -155,6 +159,12 @@ public class DamengStreamingChangeEventSourceMetrics
         hoursToKeepTransaction.set(Long.valueOf(connectorConfig.getLogMiningTransactionRetention().toHours()).intValue());
 
         reset();
+    }
+
+    @Override
+    public String[] getMonitoredTables()
+    {
+        return new String[0];
     }
 
     @Override
@@ -543,9 +553,27 @@ public class DamengStreamingChangeEventSourceMetrics
     }
 
     @Override
+    public Map<String, String> getSourceEventPosition()
+    {
+        return Maps.newHashMap();
+    }
+
+    @Override
+    public long getMilliSecondsBehindSource()
+    {
+        return 0;
+    }
+
+    @Override
     public long getNumberOfCommittedTransactions()
     {
         return committedTransactions.get();
+    }
+
+    @Override
+    public String getLastTransactionId()
+    {
+        return "";
     }
 
     @Override
@@ -812,5 +840,134 @@ public class DamengStreamingChangeEventSourceMetrics
                 ", warningCount=" + warningCount.get() +
                 ", scnFreezeCount=" + scnFreezeCount.get() +
                 '}';
+    }
+
+    @Override
+    public void register()
+    {
+    }
+
+    @Override
+    public void unregister()
+    {
+    }
+
+    @Override
+    public String getLastEvent()
+    {
+        return "";
+    }
+
+    @Override
+    public long getMilliSecondsSinceLastEvent()
+    {
+        return 0;
+    }
+
+    @Override
+    public long getTotalNumberOfEventsSeen()
+    {
+        return 0;
+    }
+
+    @Override
+    public long getTotalNumberOfCreateEventsSeen()
+    {
+        return 0;
+    }
+
+    @Override
+    public long getTotalNumberOfUpdateEventsSeen()
+    {
+        return 0;
+    }
+
+    @Override
+    public long getTotalNumberOfDeleteEventsSeen()
+    {
+        return 0;
+    }
+
+    @Override
+    public long getNumberOfEventsFiltered()
+    {
+        return 0;
+    }
+
+    @Override
+    public long getNumberOfErroneousEvents()
+    {
+        return 0;
+    }
+
+    @Override
+    public boolean isConnected()
+    {
+        return false;
+    }
+
+    @Override
+    public int getQueueTotalCapacity()
+    {
+        return 0;
+    }
+
+    @Override
+    public int getQueueRemainingCapacity()
+    {
+        return 0;
+    }
+
+    @Override
+    public long getMaxQueueSizeInBytes()
+    {
+        return 0;
+    }
+
+    @Override
+    public long getCurrentQueueSizeInBytes()
+    {
+        return 0;
+    }
+
+    @Override
+    public String[] getCapturedTables()
+    {
+        return new String[0];
+    }
+
+    @Override
+    public void onEvent(Partition partition, DataCollectionId dataCollectionId, OffsetContext offsetContext, Object o, Struct struct, Envelope.Operation operation)
+    {
+    }
+
+    @Override
+    public void onFilteredEvent(Partition partition, String s)
+    {
+    }
+
+    @Override
+    public void onFilteredEvent(Partition partition, String s, Envelope.Operation operation)
+    {
+    }
+
+    @Override
+    public void onErroneousEvent(Partition partition, String s)
+    {
+    }
+
+    @Override
+    public void onErroneousEvent(Partition partition, String s, Envelope.Operation operation)
+    {
+    }
+
+    @Override
+    public void onConnectorEvent(Partition partition, ConnectorEvent connectorEvent)
+    {
+    }
+
+    @Override
+    public void connected(boolean b)
+    {
     }
 }

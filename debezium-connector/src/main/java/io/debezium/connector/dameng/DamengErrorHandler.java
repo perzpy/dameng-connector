@@ -19,9 +19,24 @@ import java.sql.SQLRecoverableException;
 public class DamengErrorHandler
         extends ErrorHandler
 {
+    /**
+     * 新版本构造函数，适配Debezium 1.9.8.Final
+     */
     public DamengErrorHandler(String logicalName, ChangeEventQueue<?> queue)
     {
-        super(DamengConnector.class, logicalName, queue);
+        super(DamengConnector.class, new DamengConnectorConfig(
+                        io.debezium.config.Configuration.create()
+                                .with(DamengConnectorConfig.SERVER_NAME, logicalName)
+                                .build()),
+                queue);
+    }
+
+    /**
+     * 新增一个构造函数，接受DamengConnectorConfig参数
+     */
+    public DamengErrorHandler(DamengConnectorConfig connectorConfig, ChangeEventQueue<?> queue)
+    {
+        super(DamengConnector.class, connectorConfig, queue);
     }
 
     @Override
