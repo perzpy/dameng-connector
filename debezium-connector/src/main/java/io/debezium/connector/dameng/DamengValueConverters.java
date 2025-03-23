@@ -472,7 +472,7 @@ public class DamengValueConverters
     protected Object convertTimestampToEpochMillis(Column column, Field fieldDefn, Object data)
     {
         if (data instanceof String) {
-            data = resolveTimestampStringAsInstant((String) data);
+            data = resolveTimestampStringAsInstant(String.valueOf(data).trim());
         }
         return super.convertTimestampToEpochMillis(column, fieldDefn, fromOracleTimeClasses(column, data));
     }
@@ -489,6 +489,19 @@ public class DamengValueConverters
     private Instant resolveTimestampStringAsInstant(String data)
     {
         LocalDateTime dateTime;
+
+        // 处理达梦TIMESTAMP格式的逻辑
+        if (data.startsWith("TIMESTAMP'") && data.endsWith("'")) {
+            String dateText = data.substring(10, data.length() - 1);
+            try {
+                dateTime = LocalDateTime.from(TIMESTAMP_FORMATTER.parse(dateText.trim()));
+                return dateTime.atZone(GMT_ZONE_ID).toInstant();
+            }
+            catch (Exception e) {
+                // 如果解析失败，可以尝试记录日志，然后继续后续匹配
+                logger.warn("Failed to parse timestamp string: " + data, e);
+            }
+        }
 
         final Matcher toTimestampMatcher = TO_TIMESTAMP.matcher(data);
         if (toTimestampMatcher.matches()) {
